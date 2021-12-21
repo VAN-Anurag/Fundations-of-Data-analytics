@@ -1,0 +1,138 @@
+---
+title: "Homework1"
+output: html_document
+---
+```{r}
+# Import Libraries
+library(dplyr)
+library(tidyr)
+library(stringr)
+```
+
+```{r}
+dim(fm)
+```
+
+
+# Question 1
+```{r}
+# Question 1.1 - Compute the number of farmers market in the United States
+count_of_farmers_market = length(unique(fm$FM))
+print(paste ("The number of farmers market in the United States are:", count_of_farmers_market))
+```
+```{r}
+dim(fm)
+fm %>%
+  group_by(State) %>%
+  summarise(number_of_accidents=n()) %>%
+  drop_na()
+```
+
+```{r}
+# Question 1.2 - Write a code to compute the number of farmers markets by state and arrange them in descending order of number of farmers market.
+list_of_states <- unique(fm$State)
+count_of_markets <- 1:length(list_of_states)
+
+for (i in 1:length(list_of_states)){
+  #print(i)
+  count_of_markets_in_state <- dim(subset(fm, fm$State==list_of_states[i]))[1]
+  count_of_markets[i] <- count_of_markets_in_state
+}
+df <- data.frame("State"=list_of_states, "Count_Of_Market"=count_of_markets)
+df[order(df$Count_Of_Market, decreasing = TRUE),]
+#df
+```
+```{r}
+#question 1.3 - Write a code to compute the number of farmers market by cities in Massachusetts and display the top five cities.
+ma_state = subset(fm, fm$State=="Massachusetts")
+## City with null value
+print(paste("The number of cities with null values are:", sum(is.na(ma_state$city))))
+## drop the null value
+ma_state <- ma_state[!is.na(ma_state$city),]
+
+list_of_cities <- unique(ma_state$city)
+count_of_markets <- 1:length(list_of_cities)
+
+for (i in 1:length(list_of_cities)){
+  #print(i)
+  count_of_markets_in_city <- dim(subset(ma_state, ma_state$city==list_of_cities[i]))[1]
+  count_of_markets[i] <- count_of_markets_in_city
+}
+df <- data.frame("City"=list_of_cities, "Count_Of_Market"=count_of_markets)
+df <- df[order(df$Count_Of_Market, decreasing = TRUE),]
+head(df, 5)
+```
+
+
+```{r}
+## Question 1.4 - Write a code to show the top 5 states by number of farmers market that offers coffee
+temp_df <- fm %>%
+  filter(Coffee=="Y")
+
+answer <- temp_df %>%
+  group_by(State) %>%
+  summarise(Number_of_Markets = n())
+  ##how to sort here
+answer <- answer[order(answer$Number_of_Markets, decreasing = TRUE),]
+head(answer, 5)
+```
+## Question 2
+
+```{r}
+## Question 2.1 - Use the “designation” variable and calculate the number of 20 year old wine in the dataset
+wine_data$designation <- str_to_lower(wine_data$designation)
+
+
+string_list <- c("20 years","20 year","20 yrs","20 yr","20 anos","20_years","20_year","20_yrs","20_yr","20_anos","20-years","20-year","20-yrs","20-yr","20-anos","20years","20year","20yr","20yrs","20anos","20 th anni","20th anni")
+temp_df <- data.frame()
+
+for (i in string_list){
+  index <- str_which(wine_data$designation, i)
+  answer <- wine_data[index,]
+  temp_df <- rbind(temp_df,answer) 
+}
+
+temp_df <- temp_df[!duplicated(temp_df),]
+```
+
+
+## Question 3
+```{r}
+## Question 3.1 - Write an R code to extract keyword data from the above file and convert it to a weighted adjacency matrix. See the figure below to understand the process
+
+## drop rows with null keywords
+Keyword_data1 = Keyword_data[!is.na(Keyword_data$`Keyword 1`),]
+temp <- c()
+
+for (i in 1:dim(Keyword_data1)[1] ){
+  for ( j in 2:dim(Keyword_data1)[2]){
+    if (!is.na(Keyword_data1[[i,j]])){
+      temp <- c(temp,tolower( Keyword_data1[[i,j]]))
+    }
+  }
+}
+temp<-unique(temp)
+
+temp_mat <- matrix(0, nrow = length(temp), ncol =length(temp) )
+
+rownames(temp_mat) <- c(temp)
+colnames(temp_mat) <- c(temp)
+
+n_rows = dim(Keyword_data1)[1]
+for (x in 1:n_rows){
+  for (i in 2:length(Keyword_data1)){
+    for (j in 2:length(Keyword_data1)){
+      #print(Keyword_data1[[x,j]])
+      key1 <- tolower(Keyword_data1[[x,i]])
+      #print(key1)
+      key2 <- tolower(Keyword_data1[[x,j]])
+      #print(key2)
+      if ((!is.na(key1))&&(!is.na(key2))&&(key1!=key2)){
+        temp_mat[key1, key2] = temp_mat[key1, key2]+1 
+      }
+      #print(temp_mat[tolower(key1), tolower(key2)]) #= temp_mat[key1, key2]+1
+    }
+  }
+}
+```
+

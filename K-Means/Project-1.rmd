@@ -1,0 +1,1052 @@
+---
+title: "Project-1-HW-Group-19"
+author: "Abhinav Mishra, Mukul Agrawal, Anurag Kosana"
+date: "11/24/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message=FALSE)
+options(warn = -1)
+```
+
+# Note: Please open this file in Mozilla Firefox for all the plots to be plotted correctly.
+
+# Project - 1
+
+## Adding all libraries
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(plotly)
+library(factoextra)
+library(NbClust)
+library(readr)
+library(tidyr)
+library(stringr)
+library(kableExtra)
+library(ClusterR)
+library(clValid)
+library(fpc)
+```
+
+
+## Loading and preprocessing data
+
+```{r}
+
+
+for (i in 1:8){
+  assign(paste("df_", as.character(i),sep="") ,read_csv(paste("Data",as.character(i),".csv",sep=""),show_col_types=F))
+}
+
+
+```
+
+```{R}
+## Helper function to find out NULL values in data
+
+check_null_values <- function(passed_df,idx) {
+  
+  print(paste("For dataframe ",idx))
+  col_names <- colnames(passed_df)
+  
+  # Total number of rows
+  num_rows <- dim(passed_df)[1]
+
+  for (cn in col_names) {
+    missing_percent <- round(sum(is.na(passed_df[cn])) /num_rows  * 100,2)
+      print(
+      paste("Missing values in column ",cn, missing_percent,"(%)")
+    )
+      
+    }
+}
+
+
+for (i in 1:8) {
+  # Checking null values
+  check_null_values(get(paste("df_",i,sep="")),i)
+}
+
+```
+
+> As we can see above, none of the columns have missing values. Also, Values are in appropriate scale for every dataset.
+
+
+
+## Applying clustering methods 
+
+### Dataframe 1
+
+```{R}
+## Helper function to plot two scatter plots side by side
+
+## Color pallete for plotting datasets
+pallete <- c("red", "blue", "green")
+
+## Helper function
+plot_scatter_plots_3d <- function(passed_df,column_names,title,plot_type,plot_by) {
+  
+plot_1_passed_df <- plot_ly(data=passed_df, x=passed_df[[column_names[1]]], y=passed_df[[column_names[2]]], z=passed_df[[column_names[3]]], type="scatter3d", color=passed_df$Class,colors=pallete,mode="markers",symbol="Class",scene="scene1",showlegend=F) %>% hide_colorbar()
+
+plot_2_passed_df <- plot_ly(data=passed_df, x=passed_df[[column_names[1]]], y=passed_df[[column_names[2]]], z=passed_df[[column_names[3]]], type="scatter3d", color=passed_df[[plot_by]],colors=pallete,mode="markers",symbol="Class",scene="scene2",showlegend=F) %>% hide_colorbar()
+
+
+annotations = list( 
+  list( 
+    x = 0.25,  
+    y = 0,  
+    text = "Original Data",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.75,  
+    y = 0,  
+    text = paste("Clustered Data - ",plot_type,sep=""),  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )
+  )  
+
+return (subplot(plot_1_passed_df,plot_2_passed_df) %>% layout(title=title,annotations=annotations))
+}
+
+```
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_1_num_original_clusters <- length(unique(df_1$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_1[1:length(df_1)-1],df_1_num_original_clusters ,nstart=10)
+df_1$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_1 <- hclust(dist(df_1[1:length(df_1)-1]),method="complete")
+
+# Clusters generated through heirarchical
+df_1$h_class <- cutree(hc_single_df_1,df_1_num_original_clusters)
+
+```
+
+#### Verifying using external validation
+
+```{R}
+
+df_1_validation_kmeans <-  external_validation(df_1$Class, df_1
+                                     $km_class, method = "rand_index")
+
+df_1_validation_heirarch <- external_validation(df_1$Class,df_1$h_class,method="rand_index")
+
+paste("For dataframe 1, validating k means through rand_index gives ",round(df_1_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_1_validation_heirarch,digits=3))
+```
+
+
+#### Plotting k means vs actual data
+
+```{R}
+fig_1_km <- plot_scatter_plots_3d(passed_df=df_1,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 1", plot_type="K means",plot_by= "km_class")
+
+fig_1_km
+```
+
+
+>As we can see in the above plot, Clusters have further mixed up a little and proper separation of clusters in the original dataset are not represented perfectly.Rand index = 0.99
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+
+fig_1_hc <- plot_scatter_plots_3d(passed_df=df_1,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 1", plot_type="K means",plot_by= "h_class")
+
+fig_1_hc
+```
+
+> As we can see in the above plot, Clusters have been mixed up a little and proper separation of clusters in the original dataset are not represented perfectly. Rand index = 0.91
+
+
+### Dataframe 2
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_2_num_original_clusters <- length(unique(df_2$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_2[c(2,3,4)],df_2_num_original_clusters ,nstart=10)
+df_2$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_2 <- hclust(dist(df_2[c(2,3,4)]),method="complete")
+
+# Clusters generated through heirarchical
+df_2$h_class <- cutree(hc_single_df_2,df_2_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+```{R}
+df_2_validation_kmeans <-  external_validation(df_2$Class, df_2
+                                     $km_class, method = "rand_index")
+
+df_2_validation_heirarch <- external_validation(df_2$Class,df_2$h_class,method="rand_index")
+
+
+paste("For dataframe 2, validating k means through rand_index gives ",round(df_2_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_2_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that the observations aren't completely correctly clustered according to the original dataset clusters and same is reflected through  the plots.
+
+
+#### Plotting k means vs actual data
+
+```{R}
+fig_2_km <- plot_scatter_plots_3d(passed_df=df_2,column_names = c("X","Y","C"),"Actual vs Clustered Data - K means DF 2", plot_type="K means",plot_by= "km_class")
+
+fig_2_km
+
+```
+
+> As we can see in the above plot, Clusters have been mixed up a little and proper separation of clusters in the original dataset are not represented perfectly. Rand index = 0.79
+
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+
+fig_2_hc <- plot_scatter_plots_3d(passed_df=df_2,column_names = c("X","Y","C"),"Actual vs Clustered Data - Heirarchical DF 2", plot_type="Heirarchical Clustering",plot_by= "h_class")
+
+fig_2_hc
+
+```
+
+> As we can see in the above plot, Clusters have further mixed up a little and proper separation of clusters in the original dataset are not represented perfectly.Rand index = 0.82
+
+
+
+### Dataframe 3
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_3_num_original_clusters <- length(unique(df_3$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_3[c(2,3,4)],df_3_num_original_clusters ,nstart=10)
+df_3$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_3 <- hclust(dist(df_3[c(2,3,4)]),method="complete")
+
+# Clusters generated through heirarchical
+df_3$h_class <- cutree(hc_single_df_3,df_3_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+```{R}
+df_3_validation_kmeans <-  external_validation(df_3$Class, df_3
+                                     $km_class, method = "rand_index")
+
+df_3_validation_heirarch <- external_validation(df_3$Class,df_3$h_class,method="rand_index")
+
+
+paste("For dataframe 3, validating k means through rand_index gives ",round(df_3_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_3_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that the observations are clustered correctly through k means and 99 percent correct in heirarchical. This might be due to proper separation of clusters in this dataset.
+
+#### Plotting k means vs actual data
+
+```{R}
+fig_3_km <- plot_scatter_plots_3d(passed_df=df_3,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 3", plot_type="K means",plot_by= "km_class")
+
+fig_3_km
+```
+
+> As we can see in the above plot, Clusters have correctly plotted, all data correctly clustered using heirarchical clustering. Rand index = 0.99
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+fig_3_hc <- plot_scatter_plots_3d(passed_df=df_3,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - Heirarchical DF 3", plot_type="Heirarchical Clustering",plot_by= "h_class")
+
+fig_3_hc 
+
+```
+
+> As we can see in the above plot, Clusters are correct, with only 1% deviation from original clusters. Rand index = 1
+
+
+### Dataframe 4
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_4_num_original_clusters <- length(unique(df_4$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_4[c(2,3,4)],df_4_num_original_clusters ,nstart=10)
+df_4$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_4 <- hclust(dist(df_4[c(2,3,4)]),method="complete")
+
+# Clusters generated through heirarchical
+df_4$h_class <- cutree(hc_single_df_4,df_4_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+```{R}
+df_4_validation_kmeans <-  external_validation(df_4$Class, df_4
+                                     $km_class, method = "rand_index")
+
+df_4_validation_heirarch <- external_validation(df_4$Class,df_4$h_class,method="rand_index")
+
+
+paste("For dataframe 4, validating k means through rand_index gives ",round(df_4_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_4_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that the observations are clustered incorrectly through k means and heirarchical ( about half of the observations and 33 percent incorrectly)
+
+#### Plotting k means vs actual data
+
+```{R}
+fig_4_km <- plot_scatter_plots_3d(passed_df=df_4,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 4", plot_type="K means",plot_by= "km_class")
+
+fig_4_km
+```
+
+> As we can see in the above plot, Clusters have been mixed up for the two overlapping rings, through k means. Rand index = 0.54
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+
+fig_4_hc <- plot_scatter_plots_3d(passed_df=df_4,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - Heirarchical DF 4", plot_type="Heirarchical Clustering",plot_by= "h_class")
+
+
+fig_4_hc
+
+
+```
+
+> Similar observation is seen on Clustering for heirarchical clustering, with ring pattern getting wrongly clustered.
+
+
+
+### Dataframe 5
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_5_num_original_clusters <- length(unique(df_5$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_5[c(2,3,4)],df_5_num_original_clusters ,nstart=10)
+df_5$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_5 <- hclust(dist(df_5[c(2,3,4)]),method="complete")
+
+# Clusters generated through heirarchical
+df_5$h_class <- cutree(hc_single_df_5,df_5_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+
+
+```{R}
+df_5_validation_kmeans <-  external_validation(df_5$Class, df_5
+                                     $km_class, method = "rand_index")
+
+df_5_validation_heirarch <- external_validation(df_5$Class,df_5$h_class,method="rand_index")
+
+
+paste("For dataframe 5, validating k means through rand_index gives ",round(df_5_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_5_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that about half the observations are clustered incorrectly through k means and heirarchical clustering.
+
+#### Plotting k means vs actual data
+```{R}
+fig_5_km <- plot_scatter_plots_3d(passed_df=df_5,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 5", plot_type="K means",plot_by= "km_class")
+
+fig_5_km
+```
+
+> As we can see in the above plot, Clusters have been mixed up for the top half and center of the sphere.Rand index = 0.55
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+
+fig_5_hc <- plot_scatter_plots_3d(passed_df=df_5,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - Heirarchical DF 5", plot_type="Heirarchical Clustering",plot_by= "h_class")
+
+fig_5_hc
+
+```
+
+> Similar observation is seen on Clustering for heirarchical clustering, with bottom half of the sphere being clustered incorrectly. Rand index = 0.59
+
+
+### Dataframe 6
+
+#### Generating Clusters 
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_6_num_original_clusters <- length(unique(df_6$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_6[c(2,3)],df_6_num_original_clusters ,nstart=10)
+
+df_6$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_6<- hclust(dist(df_6[c(2,3)]),method="complete")
+
+# Clusters generated through heirarchical
+df_6$h_class <- cutree(hc_single_df_6,df_6_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+```{R}
+df_6_validation_kmeans <-  external_validation(df_6$Class, df_6
+                                     $km_class, method = "rand_index")
+
+df_6_validation_heirarch <- external_validation(df_6$Class,df_6$h_class,method="rand_index")
+
+
+paste("For dataframe 6, validating k means through rand_index gives ",round(df_6_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_6_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that the observations are mostly clustered correctly through k means and only about 50 percent of the observations are correctly classified through heirarchical clustering.
+
+#### Plotting actual data vs K means clustering and Heirarchical clustering
+
+```{R}
+# Storing plot of original dataframe
+plot_6_df_original<- plot_ly(data=df_6, x=~X1, y=~X2, type="scatter", mode="markers", color=~Class,colors=pallete,size = 1) %>% hide_colorbar()
+```
+
+#### K means cluster plot
+
+```{R}
+plot_6_df_k_means <- plot_ly(data=df_6, x=~X1, y=~X2, type="scatter", mode="markers", color=~km_class,colors=pallete,size = 1) %>% hide_colorbar()
+
+annotations = list( 
+  list( 
+    x = 0.25,  
+    y = 0,  
+    text = "Original Data",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.75,  
+    y = 0,  
+    text = "Clustered Data - K means)",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )
+)
+  
+fig_6_df_kmeans <- subplot(plot_6_df_original,plot_6_df_k_means) %>% layout( title="Actual vs Clustered Data - K means DF 6",annotations=annotations ) %>% hide_colorbar() %>% hide_legend()
+
+fig_6_df_kmeans
+
+```
+
+> From the above plot we can see, that most of the observations have been clustered in the cluster according to original dataset, however some have been incorrectly clustered.Rand index = 0.90
+
+#### Heirarchical cluster plot
+
+```{R}
+plot_6_df_hclust <- plot_ly(data=df_6, x=~X1, y=~X2, type="scatter", mode="markers", color=~h_class,colors=pallete,size = 1) %>% hide_colorbar()
+
+annotations = list( 
+  list( 
+    x = 0.25,  
+    y = 0,  
+    text = "Original Data",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.75,  
+    y = 0,  
+    text = "Clustered Data - Heirarchical Clustering)",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )
+)
+  
+fig_6_df_hclust <- subplot(plot_6_df_original,plot_6_df_hclust) %>% layout( title="Actual vs Clustered Data - Heirarchical clustering DF 6",annotations=annotations ) %>% hide_colorbar() %>% hide_legend()
+
+fig_6_df_hclust
+
+```
+
+> As we can see in the above plot, clusters have been mixed up for the dataset.
+
+
+
+### Dataframe 7
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_7_num_original_clusters <- length(unique(df_7$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_7[c(2,3)],df_7_num_original_clusters ,nstart=10)
+
+df_7$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_7<- hclust(dist(df_7[c(2,3)]),method="complete")
+
+# Clusters generated through heirarchical
+df_7$h_class <- cutree(hc_single_df_7,df_7_num_original_clusters)
+
+```
+
+
+
+#### Verification of kmeans/heirarchical clustering
+
+```{R}
+df_7_validation_kmeans <-  external_validation(df_7$Class, df_7
+                                     $km_class, method = "rand_index")
+
+df_7_validation_heirarch <- external_validation(df_7$Class,df_7$h_class,method="rand_index")
+
+
+paste("For dataframe 6, validating k means through rand_index gives ",round(df_7_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_7_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that the observations are clustered correctly when we use k means (82%) vs 60% with heirarchical clustering
+
+#### Plotting actual data vs K means clustering and Heirarchical clustering
+
+```{R}
+# Storing plot of original dataframe
+plot_7_df_original<- plot_ly(data=df_7, x=~X1, y=~X2, type="scatter", mode="markers", color=~Class,colors=pallete,size = 1) %>% hide_colorbar()
+```
+
+#### K means cluster plot
+
+```{R}
+plot_7_df_k_means <- plot_ly(data=df_7, x=~X1, y=~X2, type="scatter", mode="markers", color=~km_class,colors=pallete,size = 1) %>% hide_colorbar()
+
+annotations = list( 
+  list( 
+    x = 0.25,  
+    y = 0,  
+    text = "Original Data",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.75,  
+    y = 0,  
+    text = "Clustered Data - K means)",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )
+)
+  
+fig_7_df_kmeans <- subplot(plot_7_df_original,plot_7_df_k_means) %>% layout( title="Actual vs Clustered Data - K means DF 7",annotations=annotations ) %>% hide_colorbar() %>% hide_legend()
+
+fig_7_df_kmeans
+
+```
+
+> From the above plot we can see, that clustering around the x-y plane seems to have caused clustering to be different for different x-y plane sections. Whereas original cluster classes are constant in a circular pattern across the origin ( cocentric circles).Rand index = 0.59
+
+#### Heirarchical cluster plot
+
+```{R}
+plot_7_df_hclust <- plot_ly(data=df_7, x=~X1, y=~X2, type="scatter", mode="markers", color=~h_class,colors=pallete,size = 1) %>% hide_colorbar()
+
+annotations = list( 
+  list( 
+    x = 0.25,  
+    y = 0,  
+    text = "Original Data",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.75,  
+    y = 0,  
+    text = "Clustered Data - Heirarchical Clustering)",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )
+)
+  
+fig_7_df_hclust <- subplot(plot_7_df_original,plot_7_df_hclust) %>% layout( title="Actual vs Clustered Data - Heirarchical clustering DF 7",annotations=annotations ) %>% hide_colorbar() %>% hide_legend()
+
+fig_7_df_hclust
+
+```
+
+> Heirarchical clustering also gives similar results, with clustering getting mixed up around various quadrants in the x-y plane.Rand index = 0.81
+
+
+
+### Dataframe 8
+
+#### Generating Clusters
+
+```{R}
+set.seed(1000)
+
+# Number of original class clusters
+df_8_num_original_clusters <- length(unique(df_8$Class))
+
+# Applying k means                               
+km_res <- kmeans(df_8[c(2,3,4)],df_8_num_original_clusters ,nstart=10)
+df_8$km_class <- km_res$cluster
+
+# Applying heirarchical clustering
+hc_single_df_8 <- hclust(dist(df_8[c(2,3,4)]),method="complete")
+
+# Clusters generated through heirarchical
+df_8$h_class <- cutree(hc_single_df_8,df_8_num_original_clusters)
+
+```
+
+#### Verifying + Plotting scatterplots
+
+```{R}
+df_8_validation_kmeans <-  external_validation(df_8$Class, df_8
+                                     $km_class, method = "rand_index")
+
+df_8_validation_heirarch <- external_validation(df_8$Class,df_8$h_class,method="rand_index")
+
+
+paste("For dataframe 8, validating k means through rand_index gives ",round(df_8_validation_kmeans,digits=3)," while validating heirarchical gives us ",round(df_8_validation_heirarch,digits=3))
+
+```
+
+> This gives us insight that clusteres have been separated correctly.
+
+#### Plotting k means vs actual data
+
+```{R}
+fig_8_km <- plot_scatter_plots_3d(passed_df=df_8,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - K means DF 8", plot_type="K means",plot_by= "km_class")
+
+fig_8_km
+```
+
+> As we can see in the above plot, Clusters are correct.Rand index = 1
+
+#### Plotting heirarchical vs actual data
+
+```{R}
+
+fig_8_hc <- plot_scatter_plots_3d(passed_df=df_8,column_names = c("X1","X2","X3"),"Actual vs Clustered Data - Heirarchical DF 8", plot_type="Heirarchical Clustering",plot_by= "h_class")
+
+fig_8_hc
+```
+
+> Same observation is seen on Clustering for heirarchical clustering for dataset 8.Rand index = 1
+
+
+### Evaluation metrics:
+
+1. **Jaccard Coefficient**
+
+![Jaccard Coefficient](./Jaccard.jpg)
+
+> Jaccard cofficient J (formula shown above)
+`J= TP / TP+FP+FN`
+TP TruePositive predicted value and actual value are same
+TN TrueNegative other value identified as actualvalue
+FP FalsePositive actual value identified as other value
+FN FalseNegative other value identified as other value
+
+2. **Rand Index**
+
+![Rand Index](./RAND_Index.jpg)
+
+> Rand(R)= `TP+TN / M`
+Sum of True identified by sum of total observations
+
+## Problem 2
+
+> Step 1 : Clean and preprocess data based on missing values, scale values. Drop columns if needed.
+
+
+### 2.1 Loading dataset
+
+```{R}
+world_ind_df = read_csv("World Indicators.csv", show_col_types = FALSE)
+```
+
+
+### 2.2 Calculating and removing NA/null values
+
+> After analysing our dataset, we have decided to drop the columns where we are encountering more than 25% missing values. There are two such columns:  :"Lending Interest", "Internet Usage"
+
+```{r}
+
+# Column names of dataset
+col_names_world_ind <- colnames(world_ind_df)
+
+# Total number of rows
+num_rows <- dim(world_ind_df)[1]
+
+# Vector for holding names of columns to drop
+columns_to_drop <- c()
+
+missing_cols_df <- data.frame("Col","percent")
+
+for (cn in col_names_world_ind) {
+  missing_percent <- round(sum(is.na(world_ind_df[cn])) /num_rows  * 100,2)
+  
+  # Dropping entire columns with a threshold of 25%
+  if (missing_percent > 25 ) {
+    print(
+    paste("Missing values in column ",cn, missing_percent,"(%)")
+  )
+    print(
+      paste("Adding",cn,"to list of dropped columns")
+    )
+    columns_to_drop <- append(columns_to_drop,cn)
+  }
+}
+
+# Dropping columns which have >= 25 percent missing values 
+world_ind_df_formatted <- world_ind_df[,!(names(world_ind_df) %in% columns_to_drop)]
+
+# Printing the dropped columns
+print(paste("Columns dropped: ",columns_to_drop[1],",",columns_to_drop[2]))
+
+
+```
+
+> We also noticed that although missing percentage for some columns is less, there are quite a few records with missing values. Dropping these records, we get the following dimensions for dataframe: 171 X 18
+
+```{R}
+# Dimensions of dataframe after removal of null values.
+world_ind_df_formatted <- na.omit(world_ind_df_formatted)
+# Original dataframe dimensions
+print(paste("Original dataframe dimensions",dim(world_ind_df)[1],"X",dim(world_ind_df)[2]))
+print(paste("Dataframe dimensions after dropping NA values",dim(world_ind_df_formatted)[1],"X",dim(world_ind_df_formatted)[2]))
+
+```
+
+> It is important to know that our dataset has not "leaked" any information or become unbalanced in any way, To ensure this, we have done two things:
+
+  1. Verified that all regions are still present in the dataset (No region is removed completely)
+  
+```{R}
+# Since these values are same, All regions data still exists, hence we are not missing out on any important information
+length(unique(world_ind_df$Region)) == length(unique(world_ind_df_formatted$Region))
+```
+  
+  2. Verified that all regions have adequate representation in the dataset, after cleaning ( number of      countries before and after cleaning per region doesn't have a stark difference )
+  
+**This is clearly illustrated with the barplot below**
+
+```{R}
+
+## Counting countries per Region / Continent in Original dataset
+
+countries_by_region <- world_ind_df %>% group_by(Region) %>% summarise(num_countries=n())
+
+
+countries_by_region_removed <- world_ind_df_formatted %>% group_by(Region) %>% summarise(num_countries=n())
+
+
+countries_with_and_without <- data.frame(countries_by_region$num_countries,countries_by_region_removed$num_countries)
+
+barplot(t(as.matrix(countries_with_and_without)), main="Number of countries by region in unfiltered vs filtered dataset",
+  xlab="Name of region",  ylab="Number of Countries", col=c("darkblue","red"),legend.text=c("unfiltered","filtered"),
+    args.legend = list(x = "bottomleft",
+                           inset = c(-0.10, -0.32)),
+   beside=TRUE,names.arg=unique(countries_by_region$Region))
+
+
+
+```
+
+
+> As we can see in the barplot above, there is a tiny difference in number of countries per region before and after filtering NA values in dataset.
+
+
+> To make sure our cluster analysis is correct, we have removed two categorical columns "Region" and "Country". These offer no insight for the analysis of the country data, and thus we have dropped the same
+
+
+### 2.3 Ensuring data uniformity ( Removing unneeded characters / Converting columns to correct data types)
+
+> For ensuring data correctness, we have done the following things:
+
+1. Removed unneeded symbols from data
+2. Converting numerical data to appropriate datatypes
+
+```{R}
+# Replacing % symbol
+world_ind_df_formatted$`Business Tax Rate` <- as.double(str_replace_all(world_ind_df_formatted$`Business Tax Rate`, '%', ''))
+
+# Replacing commas and invalid characters in GDP
+world_ind_df_formatted$GDP <- gsub("^.{1,1}", "", world_ind_df_formatted$GDP)
+world_ind_df_formatted$GDP <- as.double(str_replace_all(world_ind_df_formatted$GDP, ',', ''))
+
+# # Replacing commas and invalid characters in Health expenditure / capita
+world_ind_df_formatted$`Health Exp/Capita` <- gsub("^.{1,1}", "", world_ind_df_formatted$`Health Exp/Capita`)
+world_ind_df_formatted$`Health Exp/Capita` <- str_replace_all(world_ind_df_formatted$`Health Exp/Capita`, ',', '')
+
+world_ind_df_formatted$`Health Exp/Capita` <- as.double(world_ind_df_formatted$`Health Exp/Capita`)
+
+# Scaling the formatted data and storing it in new dataframe
+# This is done to ensure that we don't lose the meaning of the data
+# and use scaling only for our analysis
+
+# These two columns are not numerical, thus dont need to be scaled.
+cat_columns <- c('Region', 'Country')
+```
+
+### 2.4 Feature Engineering and Scaling - Creating additional columns to add value / better results for clustering
+
+```{r}
+## Feature Engineering - Creating new columns gives us more insights on data and thus better results on clustering
+world_ind_df_formatted$health_exp <- world_ind_df_formatted$GDP * world_ind_df_formatted$`Health Exp % GDP`
+world_ind_df_formatted$population <- world_ind_df_formatted$health_exp / world_ind_df_formatted$`Health Exp/Capita`
+world_ind_df_formatted$GDP_per_capita <- world_ind_df_formatted$GDP / world_ind_df_formatted$population
+
+
+## Scale the dataframe
+world_ind_df_scaled_formatted <- scale(world_ind_df_formatted[,!(names(world_ind_df_formatted) %in% cat_columns)])
+```
+
+
+### 2.5 Finding optimal number of K (number of clusters) using elbow, silhouette method and CH index (Internal Validation)
+
+**Elbow Method (WSS) using Within cluster sum of squares **
+
+```{r}
+help("fviz_nbclust")
+fviz_nbclust(world_ind_df_scaled_formatted, kmeans, method = 'wss')
+```
+
+**Silhouette Method**
+
+```{r}
+fviz_nbclust(world_ind_df_scaled_formatted, kmeans, method = 'silhouette')
+```
+
+**CH coefficient on KMeans Clustering **
+```{r}
+x <- c(2,3,4,5,6,7,8,9,10)
+IV_val <- c()
+set.seed(2020)
+for (val in x) {
+  
+  cluster = val
+  km <- kmeans(world_ind_df_scaled_formatted, cluster , nstart=25)
+  internal_validation_val <- calinhara(world_ind_df_scaled_formatted, clustering = km$cluster, cn = cluster)
+  IV_val <- append(IV_val, internal_validation_val)
+}
+fig <- plot_ly(x = x, y = IV_val, type = 'scatter', mode = 'lines')
+fig
+```
+
+> Seeing the plots above, we can see that the optimal number of clusters in our dataset, K comes as 2 (for k means) using wss, silhouette and ch index
+
+### Evaluation metric used:
+
+![CH coefficient](./CH.jpg)
+
+
+> We have used CH coefficient to validate clusters,cohesion is estimated based on the distances from the data points in a cluster to its cluster centroid and separation is based on the distance of the cluster centroids from the global centroid.
+
+### 2.6 Clustering using k means
+
+**After preprocessing data, analyzing and setting different values of K, we finally reached a point of using 2 as Number of Clusters. Clustering the data with 2 as value of k, using k means: **
+
+```{r}
+# Number of clusters
+cluster = 2
+km <- kmeans(world_ind_df_scaled_formatted, cluster , nstart=25)
+world_ind_df_scaled_formatted <- data.frame(world_ind_df_scaled_formatted)
+# Setting cluster in scaled dataset
+world_ind_df_scaled_formatted$pr_class <- km$cluster
+# Setting cluster in original(formatted) dataset
+world_ind_df_formatted$pr_class <- km$cluster
+```
+
+**On the basis of the clusters made, we can observe the following conclusions:**
+
+* One of the clusters  includes countries like USA, Japan, Germany, Norway, Spain, China etc. This cluster mostly contains countries having higher GDP, low Infant Mortality Rate, higher life expectancy, higher Health Expenditure etc. 
+* The other cluster includes countries like India, Indonesia, Egypt, Pakistan, Rwanda, Chad etc. which have lower spending power on Health, have lower GDP per capita. Some of these countries have larger population (can be observed from below plots).
+
+
+### 2.7 Clustering using heirarchical clustering
+
+```{r}
+dist_mat <- dist(world_ind_df_scaled_formatted, method = 'euclidean')
+hclust_avg <- hclust(dist_mat, method = 'complete')
+plot (hclust_avg)
+```
+
+> As we can observe from the above plot that 4 clusters could be made out of above Dendogram. However, some clusters would have only 1 observation (or country) which doesn't seem like a feasible solution to the clustering problem.
+
+**Using internal validation CH index for hierarchical clustering optimum number of k**
+
+```{r}
+## CH index for Hierarchical Method
+x <- c(2,3,4,5,6,7,8,9,10)
+IV_val <- c()
+
+for (val in x) {
+  cluster = val
+  pr_class_vec <- cutree(hclust_avg, cluster)
+  internal_validation_val <- calinhara(world_ind_df_scaled_formatted, clustering = pr_class_vec, cn = cluster)
+  IV_val <- append(IV_val, internal_validation_val)
+}
+fig <- plot_ly(x = x, y = IV_val, type = 'scatter', mode = 'lines')
+fig
+```
+
+> The above plot of CH value for different number of clusters shows that 9 is the best value for number of cluster. But again, some clusters would have only 1 country in the cluster which is not a feasible solution for clustering. Due to these reasons we are not using heirarchical clustering method for clustering, and will be going forward with k means.
+
+
+### 2.8 Plotting insights based on above clustering and data
+
+> As per our clustering and observation on the data, *first cluster (classified as red)* seem to be the countries which would be classified under the "developed country" classification, whereas for the *second cluster (classified in blue)*,  are mostly developing or under developed countries. 
+
+
+#### 2.8.1 GDP vs Health Exp/Capita
+
+```{r}
+world_ind_df_formatted$pr_class <- as.character(world_ind_df_formatted$pr_class) 
+fig <- plot_ly(data = world_ind_df_formatted, x = ~GDP, y = ~`Health Exp/Capita`, color = ~pr_class ,size = ~population, text = ~Country,colors =c('red','blue'))
+fig <- fig %>% layout(title = 'GDP vs Health Exp/Capita')
+fig
+```
+
+
+  > Above scatter plot between GDP and Health Exp/Capita shows **Red dots which represent cluster of mostly developed        countries** and **Blue dots which represent cluster of developing and underdeveloped  countries** while **the size of     the dots is being represented by population**.
+
+**Observations:**
+
+* Countries in Red, spend the highest on health expenditure. Some of them don't have a higher GDP (relatively). For eg. Norway and Switzerland spend highest on Health.
+  
+* The countries represented by Blue color spend very much low on health. Most of these countries have high population (can be seen by size of dots).
+  
+* Some countries like India (Large Blue dot at X-axis) and China (Large Red dot at X-axis)  have significant GDP number, are not spending much on Health. It could be because of their population size. 
+
+
+
+#### 2.8.2 Birth Rate vs Infant Mortality Rate
+
+```{r}
+options(warn=-1)
+fig <- plot_ly(data = world_ind_df_formatted, x = ~`Birth Rate`, y = ~`Infant Mortality Rate`, color = ~pr_class, text = ~Country,size=~population, colors = c('red','blue'))
+fig <- fig %>% layout(title = 'Birth Rate vs Infant Mortality Rate')
+fig
+```
+
+> The above scatter plot is plotted between **Birth Rate** and **Infant Mortality Rate**. The Red Dots represent developed countries like USA, Norway, Spain, Germany etc and the Blue Dots represent countries like India, Bangladesh, Indonesia, Tanzania, Angola etc The size of the dots represents the population size. 
+
+**Observations:**
+
+* Countries like Australia, United Kingdom, Poland etc **have low Birth Rate and low Infant Mortality Rate** while countries like Pakistan, Afghanistan, Haiti, Zambia have **high Infant Mortality Rate and high Birth Rate**. 
+* High Mortality Rate for countries marked Blue is making sense as we have already seen in previous plot that such countries do not spend much on Health.
+
+
+### 2.8.3 Health Exp/Capita vs Life Expectancy Female
+
+```{r}
+fig <- plot_ly(data = world_ind_df_formatted, x = ~`Health Exp/Capita`, y = ~`Life Expectancy Female`,size = ~GDP, color = ~pr_class, text =~Country, colors = c('red','blue'))
+fig <- fig %>% layout(title = 'Health Exp/Capita vs Life Expectancy Female')
+fig
+```
+
+> The above scatter plot between **Health Exp/Capita and Life Expectancy Female**  shows many developed countries in Red, developing countries in Blue color and GDP is represented by size of dots. The observations are as follows:
+
+**Observations:**
+
+* **Countries with higher GDP like Italy, Spain, Denmark etc. have higher Life Expectancy** Female while the case is completely opposite for countries with lower GDP.
+* Majority of the countries in Blue like Sierra Leone, Botswana, Swaziland  **which spend less on health have lesser expectancy** .
+

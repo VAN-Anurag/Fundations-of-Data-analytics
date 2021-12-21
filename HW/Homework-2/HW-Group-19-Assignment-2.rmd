@@ -1,0 +1,506 @@
+---
+title: "HW-Group-19-Assignment-2"
+author: "Abhinav,Mukul,Anurag"
+date: "26/09/2021"
+output: pdf_document
+---
+# IE-5379-Assignment-2 Abhinav, Mukul, Anurag (Homework group 19)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Loading libraries
+library(lubridate)
+library(stringr)
+library(dplyr)
+library(readr)
+library(dlookr)
+library(tidyr)
+library(ggplot2)
+
+tinytex::install_tinytex()
+# Loading dataset
+df_covid_nursing <- read_csv("Covid_19_data.csv")
+
+```
+
+## Problem 1 - Write your observations on the effect of vector length on computing time using “for loop” and vector operation
+
+```{r}
+
+n_vec <- c(1000, 10000, 1000000, 10000000)
+df <- data.frame(matrix(ncol = 3, nrow = 0))
+colnames(df) <- c("Number", "For_Loop", "Vector")
+
+for (n in n_vec) {
+  x <- 1:n
+
+  ## Use of for loop
+  t1 <- Sys.time()
+  for (i in 1:length(x)) {
+    x[i] <- x[i] * 2
+  }
+  t2 <- Sys.time()
+
+  ## Vector
+  t3 <- Sys.time()
+  x <- x * 2
+  t4 <- Sys.time()
+
+  ## calculate difference and store in variables
+  diff1 <- t2 - t1
+  diff2 <- t4 - t3
+
+  ## store both time difference variables in data frame prepared above
+  df[nrow(df) + 1, ] <- c(as.character(n), diff1, diff2)
+}
+
+## Pivot the data to get the both the types in a single column
+df_longer <- df %>%
+  pivot_longer(c("For_Loop", "Vector"), names_to = "Type", values_to = "Time")
+print(df_longer)
+
+## Plot the line plot
+ggplot(data = df_longer, aes(x = Number, y = Time, group = Type, color = Type)) +
+  geom_line() +
+  xlab("Number of data points") +
+  ylab("Time in ms")
+```
+> As we can observe from the above line plot that Vector method always consumes less time than For-Loop method. As the number of data points increase, using vectors sharply out performs using for loops.
+
+## Problem 2 -> Write a custom function that accepts a dataframe from the user and returns a dataframesample with a random number of records. The fraction of records must be given by the user inthe form of an argument. If the user enters a non-numeric argument, notify using an errormessage that they have to enter a numeric value.
+
+
+```{R}
+
+get_sample_data <- function(df, n = 1000) {
+  # Check if n is supplied a numeric value
+  if (!is.numeric(n)) {
+    stop("Value of n must be numeric")
+  }
+
+  # Get number of rows dataframe
+  rows_in_df <- dim(df)[1]
+
+  # If we have lesser values in dataframe than sample, throw error
+  if (rows_in_df < n) {
+    stop("Must have >= n values in data frame")
+  }
+
+  if (n <= 0) {
+    stop("N must be positive and > 0")
+  }
+
+  # Sample rows to return values
+  rows_idx <- floor(runif(n, 1, n))
+
+  # Return sampled dataframe
+  return(df[rows_idx, ])
+}
+
+num <- readline("Please enter a number:")
+num <- as.integer(num)
+
+if ((is.na(num)) || (!is.numeric(num))) {
+  print("Please enter a valid  number.")
+} else {
+  answer_2 <- get_sample_data(df_covid_nursing, num)
+  head(answer_2, 5)
+}
+
+
+```
+
+
+## 3 Covid nursing dataset questions
+
+> Before doing any analysis, first check the quality of the data. We have column in the dataset having title "Passed Quality Assurance Check". Drop all the rows having a value as either 'N' or NULL OR select rows with the value as 'Y'.
+
+```{r}
+print(paste0("The rows in the dataframe before filter ", dim(df_covid_nursing)[1]))
+df_covid_nursing <- df_covid_nursing[(df_covid_nursing$passed_quality_assurance_check == "Y"), ]
+print(paste0("The shape of dataframe after filter ", dim(df_covid_nursing)[1]))
+```
+
+## Question 3.1 - Count the number of nursing home facilities by state and order them in descending order.
+
+```{r}
+
+answer1 <- df_covid_nursing %>%
+  group_by(provider_state) %>%
+  summarise(count = n_distinct(federal_provider_number))
+answer1[order(answer1$count, decreasing = T), ]
+```
+## Question 3.2  - Display the top five counties by number of nursing home facilities.
+
+```{r}
+
+answer2 <- df_covid_nursing %>%
+  group_by(provider_state, county) %>%
+  summarise(count = n_distinct(federal_provider_number))
+head(answer2[order(answer2$count, decreasing = T), ], 5)
+```
+
+3.3 Display four tables containing the states which experienced more than 20 weeks of shortage of nursing staff (table 1), clinical staff (table 2), aides (table 3), and other staff (table 4) (20points)
+
+**We have approached the analysis using two major approaches:**
+
+**Approach 1**
+
+1. Find all federal providers within a state.
+2. Find federal providers with missing staff where the shortage was prevalent for >= 20 weeks.
+3. Join tables with total providers per state and state data with missing providers, to calculate missing percentage.
+4.. Inspect the data and set a threshhold, for eg, for Nursing staff missing in 5 / 10 facilities in a state we count the same as (50%), and with a threshhold of 25%, we take all values >= 25.
+5. Summarize and display all such states with missing staffs and mention our observations.
+
+
+```{R}
+# Used to identify the columns relavant to the data
+column_names <- names(df_covid_nursing)
+
+
+# These are the column names relevant to shoage
+columns_to_convert <- column_names[c(66:69)]
+
+# Group and count number of providers by state
+state_with_count <- df_covid_nursing %>%
+  group_by(provider_state) %>%
+  summarize(count_of_providers = n_distinct(federal_provider_number))
+
+ind <- 1
+for (col_name in columns_to_convert) {
+
+  # Filter all values where current column is missing for more than 20 weeks, counting number of federal providers per state that faced shortages
+  temp <- df_covid_nursing %>%
+    filter(df_covid_nursing[col_name] == "Y") %>%
+    group_by(provider_state, federal_provider_number) %>%
+    summarize(count_of_shortage = n()) %>%
+    filter(count_of_shortage >= 20) %>%
+    group_by(provider_state) %>%
+    summarize(count_of_missing = n())
+
+  # Join this with state facility count table
+  joined_temp <- inner_join(state_with_count, temp, by = "provider_state")
+
+  # Calculate shortage percentage
+  joined_temp$shortage_percent <- (joined_temp$count_of_missing / joined_temp$count_of_providers) * 100
+
+  # Dynamically assign in new variable
+  assign(paste("table", col_name, sep = "_"), joined_temp)
+
+  # Increment index by one for next variable
+  ind <- ind + 1
+}
+
+# After manual inspection of nursing staff table, a threshhold where the states faced a shortage of nursing staff can be concluded as 25% or above
+table_shortage_of_nursing_staff_25 <- table_shortage_of_nursing_staff[table_shortage_of_nursing_staff$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of clinical staff table, a threshold is hard to come up with. The maximum shortage faced is 5% while minimum is 0.8%. However, since clinical staff is critical, we have taken a threshold of 3% to count a shortage
+table_shortage_of_clinical_staff_3 <- table_shortage_of_clinical_staff[table_shortage_of_clinical_staff$shortage_percent >= 3, ] %>% arrange(shortage_percent)
+
+
+# After manual inspection of aides  table, a threshhold where the states faced a shortage of nursing staff can be concluded as 25% or above
+table_shortage_of_aides_20 <- table_shortage_of_aides[table_shortage_of_aides$shortage_percent >= 20, ] %>% arrange(shortage_percent)
+
+# After manual inspection of other staff table, a threshold where the states faced a shortage of other staff can be concluded as 20% or above
+table_shortage_of_other_staff_20 <- table_shortage_of_other_staff[table_shortage_of_other_staff$shortage_percent >= 20, ] %>% arrange(shortage_percent)
+```
+
+> As per analysis and understanding of the given data, a lot of states faced a shortage of greater than or equal to 20% and 25%, which can be considered as the threshhold for a warning situation, we have bifurcated and listed down our observations below.
+
+**Observations**
+
+* **NURSING STAFF SHORTAGE**
+
+```{R}
+
+barplot(table_shortage_of_nursing_staff_25$shortage_percent, main = "Shortage of nursing staff for >= 20 week, 25% threshold", xlab = "State", ylab = "Percentage shortage", col = "red", names.arg = table_shortage_of_nursing_staff_25$provider_state, cex.names = 0.6)
+```
+
+  * For nursing staff shortage of more than 20 weeks, considering a threshold of 25% (1/4th of the states missing staff or more), there are 18 states in the given data. The  maximum shortage was faced in Minnesota (42%) and the minimum in Wyoming (27%).
+
+* **CLINICAL STAFF SHORTAGE**
+
+```{R}
+
+barplot(table_shortage_of_clinical_staff_3$shortage_percent, main = "Shortage of clinical staff for >=20 weeks, 3% threshold", xlab = "State", ylab = "Percentage shortage", col = "red", names.arg = table_shortage_of_clinical_staff_3$provider_state)
+```
+
+
+  * Clinical staff is critical for treating patients. Fortunately, there were very few states that had a high shortage of clinical staff missing from facilities for more than 20 weeks. Taking a threshold of 3%, The highest shortage of clinical staff was in Maine (5.4%) while the minimum was in Ohio (3%).
+
+* **AIDES STAFF SHORTAGE** 
+
+```{R}
+
+barplot(table_shortage_of_aides_20$shortage_percent, main = "Shortage of Aides staff for more than 20 weeks, 20% threshold", xlab = "State", ylab = "Percentage shortage", col = "red", names.arg = table_shortage_of_aides_20$provider_state, cex.names = 0.4)
+```
+
+  * Aides staff working in these facilities seem to be the highest affected, considering a threshold of 20% (1/5th of the facilities had missing aides staff or more), there are 31 states in the given data.The maximum shortage was faced in Minnesota (46%) and the minimum in Montana (20%).
+
+* **OTHER STAFF SHORTAGE**
+
+```{R}
+
+barplot(table_shortage_of_other_staff_20$shortage_percent, main = "Shortage of other staff for more than 20 weeks, 20% threshold", xlab = "State", ylab = "Percentage shortage", col = "red", names.arg = table_shortage_of_other_staff_20$provider_state, cex.names = 0.6)
+```
+
+  * Similarly, for other staff, considering a threshold of 20% (1/5th of the facilities in state missing or more), there are 7 states in the given data. The  maximum shortage was faced in New Hampshire (35%) and the minimum in South Dakota (20%).
+
+
+**Approach 2**
+
+1. Find percentage of Nursing Homes with shortage in a state in week.
+2. If percentage is higher than the set threshold, we will consider that week as shortage week for that state.
+3. Similar process will be done for all the states for each week. If the total shortage weeks are more than 20 for a state, this state will be included in our answer.
+
+
+```{r}
+## Filter the data and select only relevant columns
+covid_df <- df_covid_nursing[, c("week_ending", "federal_provider_number", "provider_state", "shortage_of_nursing_staff", "shortage_of_clinical_staff", "shortage_of_aides", "shortage_of_other_staff")]
+col_names <- c("shortage_of_nursing_staff", "shortage_of_clinical_staff", "shortage_of_aides", "shortage_of_other_staff")
+
+## Select the threshold which will be used to nursing homes in a state eligible to be considered for shortage (this threshold has been manually selected from the histogram we have produced below)
+threshold <- c(30, 5, 30, 20)
+
+for (i in 1:length(col_names)) {
+  ## Find total number of nursing homes for each state
+  state_nursing_home_count <- covid_df %>%
+    group_by(provider_state) %>%
+    summarise(count = n_distinct(federal_provider_number)) %>%
+    drop_na()
+
+  ## Filter and get all nursing homes with shortage in a week
+  shortage_week_df <- subset(covid_df, covid_df[col_names[i]] == "Y")
+
+  ## Groupby to get the number of nursing homes having a shortage in a state in a week
+  shortage_week_df <- shortage_week_df %>%
+    group_by(provider_state, week_ending) %>%
+    summarise(count = n()) %>%
+    drop_na()
+
+  ## Merge the above 2 dataframe and find the % of nursing homes with shortage in a state in a week
+  merged_df <- merge(shortage_week_df, state_nursing_home_count, by = c("provider_state"))
+  merged_df$Percentage <- (merged_df$count.x / merged_df$count.y) * 100
+  # hist(merged_df$Percentage, main = paste("Plot for ",col_names[i]),xlab = "Percentage", ylab="Frequency of shortage weeks" )
+
+  ## Filter and get the data of only those states in which has a certain (above set threshold) % of nursing homes with shortage. For eg. in state AK, in week 2021-08-01, the % of N.H. having shortage is 30%, and since the threshold is 25% for "shortage_of_nursing_staff", we will consider this week as shortage or the state AK.
+  merged_df <- merged_df[(merged_df$Percentage >= threshold[i]), ]
+  merged_df1 <- merged_df %>%
+    group_by(provider_state) %>%
+    summarise(count_of_weeks = n())
+
+  ## Find number of states having shortage of nursing staff for more than 20 weeks
+  answer <- merged_df1[(merged_df1$count_of_weeks > 20), ]
+  answer <- answer[order(answer$count_of_weeks, decreasing = TRUE), ]
+  colnames(answer) <- c("Provider_State", paste("Count_of_weeks_with_shortage_of", col_names[i], sep = "_"))
+  print(head(answer, 5))
+}
+```
+
+
+
+
+3.4 Display counties that faced more than 10 weeks  shortage of  N95 masks (table 1), surgical masks (table 2), eye protection (table 3), supply of gowns (table 4), supply of gloves (table 5),and supply of hand sanitizer (table 6) (20 points)
+
+
+**Approach 1**
+
+1. Count number of federal providers available by county by grouping on county and state.
+2. Filter for all columns wherever the supply of equipment was not present, and count number of weeks by grouping on state, county and provider number.
+3. Join total facilities in county with missing facilities, and calculate percentage of missing facilities per county.
+4. Set a threshold based on observed data and write analysis
+
+```{R}
+# Used to identify the columns relavant to the data
+column_names <- names(df_covid_nursing)
+
+# columns relevant for analysis
+relevant_columns <- column_names[c(70, 72, 74, 76, 78, 80)]
+
+# Group and count number of providers by county
+county_with_count <- df_covid_nursing %>%
+  group_by(provider_state, county) %>%
+  summarize(count_of_providers = n_distinct(federal_provider_number))
+
+
+ind <- 1
+
+for (col_name in relevant_columns) {
+
+  # Filter all values where current column is missing for more than 10 weeks, counting number of federal providers per county that faced shortages
+  temp <- df_covid_nursing %>%
+    filter(df_covid_nursing[col_name] == "N") %>%
+    group_by(provider_state, county, federal_provider_number) %>%
+    summarize(count_of_shortage = n()) %>%
+    filter(count_of_shortage >= 10) %>%
+    group_by(provider_state, county) %>%
+    summarize(count_of_missing = n())
+
+  # Join this with state facility count table
+  joined_temp <- inner_join(county_with_count, temp, by = c("provider_state", "county"))
+
+  # Calculate shortage percentage
+  joined_temp$shortage_percent <- (joined_temp$count_of_missing / joined_temp$count_of_providers) * 100
+
+  # Dynamically assign in new variable
+  assign(paste("table", col_name, sep = "_"), joined_temp)
+
+  # Increment index by one for next variable
+  ind <- ind + 1
+}
+
+# After manual inspection of N95 mask table, a threshold where the counties faced a shortage of N95 masks can be concluded as 25% or above (1/4th of facilities) had a shortage >= 10 weeks
+table_any_current_supply_of_n95_masks_25 <- table_any_current_supply_of_n95_masks[table_any_current_supply_of_n95_masks$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of surgical mask table, a threshold where the counties faced a shortage of surgical masks can be concluded as 25% or above (1/4th of facilities in a county) had a shortage >= 10 weeks
+table_any_current_supply_of_surgical_masks_25 <- table_any_current_supply_of_surgical_masks[table_any_current_supply_of_surgical_masks$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of Eye protection table, a threshold where the counties faced a shortage of Eye protection can be concluded as 25% or above (1/4th of facilities in a county) had a shortage >= 10 weeks
+table_any_current_supply_of_eye_protection_25 <- table_any_current_supply_of_eye_protection[table_any_current_supply_of_eye_protection$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of Gowns table, a threshold where the counties faced a shortage of Gowns can be concluded as 25% or above (1/4th of facilities in a county) had a shortage >= 10 weeks
+table_any_current_supply_of_gowns_25 <- table_any_current_supply_of_gowns[table_any_current_supply_of_gowns$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of Gloves table, a threshold where the counties faced a shortage of Gloves can be concluded as 25% or above (1/4th of facilities in a county) had a shortage >= 10 weeks
+table_any_current_supply_of_gloves_25 <- table_any_current_supply_of_gloves[table_any_current_supply_of_gloves$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+
+# After manual inspection of Hand Sanitizer table, a threshold where the counties faced a shortage of Hand Sanitizer can be concluded as 25% or above (1/4th of facilities in a county) had a shortage >= 10 weeks
+table_any_current_supply_of_hand_sanitizer_25 <- table_any_current_supply_of_hand_sanitizer[table_any_current_supply_of_hand_sanitizer$shortage_percent >= 25, ] %>% arrange(shortage_percent)
+```
+
+> According to our analysis, There were a lot of counties in the dataset which had a shortage of equipment in their facilities for >= 10 week for different equipment. The shortages ranged from 5% facilities in a county facing shortage for >= 10 to every facility in a county facing shortage (for certain equipment).
+
+**Observations** 
+
+* **N95 Mask shortage**
+
+```{R}
+AL_counties_shortage <- table_any_current_supply_of_n95_masks_25[(table_any_current_supply_of_n95_masks_25$provider_state == "AL"), ]
+
+barplot(AL_counties_shortage$shortage_percent, main = "Shortage of N95 masks for >= 10 weeks in Alabama", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = AL_counties_shortage$county, cex.names = 0.5)
+```
+  * There are 2897 unique counties in the dataset (some counties seem to be missing from the dataset). Out of these, 293 faced a shortage of >=10 weeks with a threshold set to 25%. Taking the example of the state **Alabama** above, 7         counties in alabama faced a shortage of 25% or more
+  
+  
+* **Surgical Mask shortage**
+
+```{R}
+AL_counties_shortage_surgical <- table_any_current_supply_of_surgical_masks_25[(table_any_current_supply_of_surgical_masks_25$provider_state == "AL"), ]
+
+barplot(AL_counties_shortage_surgical$shortage_percent, main = "Shortage of surgical masks for >= 10 weeks in Alabama", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = AL_counties_shortage_surgical$county, cex.names = 0.5)
+```
+* Out of  2897 unique counties in the dataset, 175 counties        faced a shortage of >=10 weeks (threshold = 25%). The plot of     Alabama and shortage of surgical masks faced in percentage of    facilities is shown above.
+
+  
+* **Eye protection shortage**
+
+```{R}
+AL_counties_shortage_eye_protection <- table_any_current_supply_of_eye_protection_25[(table_any_current_supply_of_eye_protection_25$provider_state == "AL"), ]
+
+barplot(AL_counties_shortage_eye_protection$shortage_percent, main = "Shortage of eye protection for >= 10 weeks in Alabama", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = AL_counties_shortage_surgical$county, cex.names = 0.5)
+```
+  * Out of  2897 unique counties in the dataset, 157 counties        faced a shortage of >=10 weeks for Eye protection (threshold     25%). The plot of Alabama and shortage of eye protection         faced   in percentage of facilities is shown above. Eye          protection and   surgical masks seem to have been missing        together in the same    counties in Alabama.
+
+* **Gowns shortage**
+
+```{R}
+AL_counties_shortage_gowns <- table_any_current_supply_of_gowns_25[(table_any_current_supply_of_gowns_25$provider_state == "AL"), ]
+
+barplot(AL_counties_shortage_gowns$shortage_percent, main = "Shortage of Gowns for >= 10 weeks in Alabama", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = AL_counties_shortage_gowns$county, cex.names = 0.5)
+```
+  * Out of  2897 unique counties in the dataset, 134 counties        faced a shortage of >=10 weeks for gowns (threshold =   25%).     The plot of Alabama and shortage of gowns faced in percentage     of facilities is shown above. 
+
+* **Gloves shortage**
+
+```{R}
+MN_counties_shortage_gloves <- table_any_current_supply_of_gloves_25[(table_any_current_supply_of_gloves_25$provider_state == "MN"), ]
+
+barplot(MN_counties_shortage_gloves$shortage_percent, main = "Shortage of Gloves for >= 10 weeks in Minnesota", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = MN_counties_shortage_gloves$county, cex.names = 0.5)
+```
+  * Out of  2897 unique counties in the dataset, 14 counties         faced a shortage of >=10 weeks for gloves (threshold = 25%). The plot of counties in Minnesota and shortage of  gloves faced   in percentage of facilities is shown above. 
+
+* **Hand Sanitizer shortage**
+
+```{R}
+MN_counties_shortage_hand_sanitizer <- table_any_current_supply_of_hand_sanitizer_25[(table_any_current_supply_of_hand_sanitizer_25$provider_state == "MN"), ]
+
+barplot(MN_counties_shortage_hand_sanitizer$shortage_percent, main = "Shortage of hand sanitizer for >= 10 weeks in Minnesota", xlab = "Counties", ylab = "Percentage shortage", col = "red", names.arg = MN_counties_shortage_hand_sanitizer$county, cex.names = 0.5)
+```
+  * Out of  2897 unique counties in the dataset, 12 counties         faced a shortage of >=10 weeks for hand sanitizers (threshold     25%).The plot of counties in Minnesota and shortage of           sanitizer faced in percentage of facilities is shown above. 
+
+
+**Approach 2**
+
+1. Find the pecentage of nursing Homes with shortage in a state-county in a week. 2. If percentage is higher than the set threshold, we will consider that week as shortage week for that state-county. Similar process will be done for all the state-counties for each week.
+3. If the total shortage weeks are more than 20 for a state-county, this state-county will be included in our answer.
+
+```{r}
+## Filter the data and select only relevant columns
+covid_df <- df_covid_nursing[, c("week_ending", "federal_provider_number", "provider_state", "county", "any_current_supply_of_eye_protection", "any_current_supply_of_n95_masks", "any_current_supply_of_surgical_masks", "any_current_supply_of_gowns", "any_current_supply_of_gloves", "any_current_supply_of_hand_sanitizer")]
+
+col_names <- c("any_current_supply_of_eye_protection", "any_current_supply_of_n95_masks", "any_current_supply_of_surgical_masks", "any_current_supply_of_gowns", "any_current_supply_of_gloves", "any_current_supply_of_hand_sanitizer")
+
+## Select the threshold which will be used to nursing homes in a state-county eligible to be considered for shortage (this threshold has been manually selected from the histogram we have produced below)
+threshold <- c(40, 40, 40, 40, 40, 40)
+
+for (i in 1:length(col_names)) {
+  ## Find total number of nursing homes for each state-county
+  state_nursing_home_count <- covid_df %>%
+    group_by(provider_state, county) %>%
+    summarise(count = n_distinct(federal_provider_number)) %>%
+    drop_na()
+
+  ## Filter and get all nursing homes with shortage in a week
+  shortage_week_df <- subset(covid_df, covid_df[col_names[i]] == "N")
+
+  ## Groupby to get the number of nursing homes having a shortage in a state-county in a week
+  shortage_week_df <- shortage_week_df %>%
+    group_by(provider_state, county, week_ending) %>%
+    summarise(count = n()) %>%
+    drop_na()
+
+  ## Merge the above 2 dataframe and find the % of nursing homes with shortage in a state in a week
+  merged_df <- merge(shortage_week_df, state_nursing_home_count, by = c("provider_state", "county"))
+  merged_df$Percentage <- (merged_df$count.x / merged_df$count.y) * 100
+
+  ## Plot the histogram
+  # hist(merged_df$Percentage, main = paste("Plot for",col_names[i]), xlab = "Percentage", ylab="Frequency of shotage weeks")
+
+  ## Filter and get the data of only those states in which has a certain (above set threshold) % of nursing homes with shortage. For eg. in county AK-Anchorage, in week 2020-05-24, the % of N.H. having shortage is 100%, and since the threshold is 50% for "any_current_supply_of_eye_protection", we will consider this week as shortage or the county AK-Anchorage.
+  merged_df <- merged_df[(merged_df$Percentage >= threshold[i]), ]
+  merged_df1 <- merged_df %>%
+    group_by(provider_state, county) %>%
+    summarise(count_of_weeks = n())
+
+  ## find counties having shortage of nursing staff for more than 10 weeks
+  answer <- merged_df1[(merged_df1$count_of_weeks > 10), ]
+  answer <- answer[order(answer$count_of_weeks, decreasing = TRUE), ]
+  colnames(answer) <- c("Provider_State", "County", paste("Count_of_weeks_with_shortage_of", col_names[i], sep = "_"))
+  print(head(answer, 5))
+}
+```
+
+
+## Question 3.5 - Display all the nursing home facilities that experienced a shortage of ventilator supplies for more than 10 weeks
+
+
+```{r}
+covid_df <- df_covid_nursing[, c("week_ending", "federal_provider_number", "provider_name", "provider_state", "county", "any_current_supply_of_ventilator_supplies")]
+
+col_names <- c("any_current_supply_of_ventilator_supplies")
+
+for (i in 1:length(col_names)) {
+  shortage_week_df <- subset(covid_df, covid_df[col_names[i]] == "N")
+
+  shortage_week_df <- shortage_week_df %>%
+    group_by(federal_provider_number, provider_name) %>%
+    summarise(number_of_shortage_weeks = n()) %>%
+    drop_na()
+
+  ## find counties having shortage of ventilator supplies for more than 10 weeks
+  answer <- shortage_week_df[(shortage_week_df$number_of_shortage_weeks > 10), ]
+  answer <- answer[order(answer$number_of_shortage_weeks, decreasing = TRUE), ]
+  print(head(answer, 5))
+}
+```

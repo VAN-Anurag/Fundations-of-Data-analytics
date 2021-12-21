@@ -1,0 +1,462 @@
+---
+title: "Homework-1-Group-19"
+author: "Abhinav, Mukul, Vijay"
+date: "17/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Homework group - 19 (Abhinav, Mukul, Vijay)
+
+
+## Data and project setup
+
+* Installing styler to maintain code consistency
+
+```{R}
+# install.packages("styler")
+```
+
+* Loading libraries
+
+```{R}
+# Loading the required libraries
+
+library(dplyr)
+library(stringr)
+library(readr)
+
+```
+
+* Reading all datasets, and storing them into data frames
+
+```{R}
+# Dataframe variables
+df_fm <- read.csv("fm.csv")
+df_wine <- read.csv("wine_data.csv")
+df_keywords <- read_csv("keyword_data.csv")
+
+# Dimension variables
+dim_farmers_market <- dim(df_fm)
+dim_wine <- dim(df_wine)
+dim_keywords <- dim(df_keywords)
+
+# Number of records / dimensions for observations
+print(paste("The dimensions for the farmers market dataset are:",dim_farmers_market[1],dim_farmers_market[2]))
+
+print(paste("The dimensions for the wines dataset are:",dim_wine[1],dim_wine[2]))
+
+print(paste("The dimensions for the key dataset are:",dim_keywords[1],dim_keywords[2]))
+
+```
+
+## 1. Questions on farmers market dataset
+
+
+1.1  Compute the number of farmers market in the United States
+
+```{R}
+# Naively, Taking number of unique market names can be taken as an assumption, and taken of as the answer
+unq_markets <- unique(df_fm$MarketName)
+
+# However this gives the answer as [1] 8243 and the observations are 8801
+incorrect_ans <- length(unq_markets)
+
+# On further inspection of the data, some of the different states have the same name of markets.
+
+# Method 1 -> Using FMID as primary key
+
+# Since Farmers market names are not unique, we can calculate number of unique FMID.
+num_unq_markets <- length(unique(df_fm$FMID))
+
+print(paste("The number of unique farmer markets based on FMID:",num_unq_markets))
+
+# Method 2 -> Generating our own primary key
+# In case we didn't have a primary key in the dataset, we can generate our own.
+
+# To do the same, we add a new identifier UNQ_ID, which is the combination of the Market Name, City , County and State and use this as our primary identifier
+df_fm$UNQ_ID <- paste(trimws(df_fm$MarketName) , trimws(df_fm$city), trimws(df_fm$County) , trimws(df_fm$State))
+
+num_unq_markets_2 <- length(df_fm$UNQ_ID)
+
+print(paste("The number of unique farmer markets based on combination of Name, City, County and State are: ",num_unq_markets_2))
+
+
+
+```
+
+1.2 Write a code to compute the number of farmers markets by state and arrange
+them in descending order of number of farmers market.
+
+* Method 1 <- Subsetting all states within fm dataset by using list of unique state
+
+```{R}
+
+## Create a vector containing state names
+list_of_states <- unique(df_fm$State)
+
+## Initialize a vector having length equal to number of state
+count_of_markets <- 1:length(list_of_states)
+
+## Apply a for loop to iterate over every state name 
+for (i in 1:length(list_of_states)){
+   ## Find the number of markets in a state and store in a variable
+  count_of_markets_in_state <- dim(subset(df_fm, df_fm$State==list_of_states[i]))[1]
+   ## Store the value of variable at the same index as of state  
+  count_of_markets[i] <- count_of_markets_in_state
+}
+
+## Create a new data frame where the column values would be 2 vectors created above
+temp_df <- data.frame("State"=list_of_states, "Count_Of_Market"=count_of_markets)
+
+## sort the dataframe on number of markets
+fm_by_states_one <- temp_df[order(temp_df$Count_Of_Market, decreasing = TRUE),]
+
+fm_by_states_one
+
+```
+
+* Method 2 <- Iterating over every unique state and farmers market data
+
+```{R}
+
+# Make a blank dataframe with unique states and count initialized as 0
+fm_by_states_two <- data.frame(State=unique(df_fm$State),cnt = c(0))
+
+
+# Looping over unique states
+for (i in 1:dim(fm_by_states_two)[1]){
+   # Looping over all farmer markets data
+  for (j in 1:dim(df_fm)[1]) {
+     # If a match is encountered with current state, increase count by 1
+   if (fm_by_states_two[i,'State'] == df_fm[j,'State']) {
+     fm_by_states_two[i,'cnt'] <- fm_by_states_two[i,'cnt'] + 1
+   }
+}
+}
+
+# Sort the dataframe
+fm_by_states_two <- fm_by_states_two[order(fm_by_states_two$cnt,decreasing =  T),]
+
+fm_by_states_two
+
+```
+
+* Method 3 -> Using DPLYR
+
+```{R}
+# Dplyr has in built functions which can help do the same with a few lines of code
+
+fm_by_states_three <- group_by(df_fm, State ) %>% summarize(cnt = n()) %>% arrange(desc(cnt), .by_group = T)
+
+fm_by_states_three
+
+```
+
+1.3 Write a code to compute the number of farmers market by cities in
+Massachusetts and display the top five cities
+
+* Method 1 <- Iterating over all farmer markets data and adding data where city matches
+
+```{R}
+
+# Making a copy of the dataframe, to avoid data iconsistency issues
+df_fm_ma <- df_fm
+
+# Creating an empty data frame with City and count as columns
+df_fm_MA_City <- data.frame(City=character(),count=as.numeric())
+
+# Removing empty values from the dataframe
+df_fm_ma <- subset(df_fm_ma ,df_fm_ma$city != "")
+
+# String manipulation to ensure consistent name of cities
+# Removing trailing / leading whitespace
+df_fm_ma$city <- trimws(df_fm_ma$city)
+
+# Converting city to lower case
+df_fm_ma$city <- tolower(df_fm_ma$city)
+
+# Iterating over farmers market dataset
+for (i in 1:dim(df_fm_ma)[1]) {
+   # If state matches Massachusetts
+   if (df_fm_ma[i,"State"] == "Massachusetts") {
+      # Current city
+      current_city <- df_fm_ma[i,"city"]
+      # Check if any city matches current city
+      if (any(df_fm_MA_City$City == current_city )  ) {
+         # Index where the city matches
+         city_index = which(df_fm_MA_City$City == current_city)
+   # Increment count of city by 1
+   df_fm_MA_City[city_index,'count']  <-  as.numeric(df_fm_MA_City[city_index,'count'])  + as.numeric(1)
+      } else {
+         # If city doesn't exist initialize it by 1
+         df_fm_MA_City[nrow(df_fm_MA_City) + 1,] = c(current_city , as.numeric(1))
+      }
+   }
+   
+}
+
+# Convert count to numeric
+df_fm_MA_City$count <- as.numeric(df_fm_MA_City$count)
+
+# Sort the values
+answer_one <- df_fm_MA_City[order(df_fm_MA_City$count,decreasing=T),]
+
+# Answer is the top 5 values
+answer_one <- head(answer,5)
+
+answer_one
+```
+
+* Method 2 <- Using subset to match cities while iterating
+
+```{r}
+## Filter data on MA state
+ma_state = subset(df_fm, df_fm$State=="Massachusetts")
+
+## Trimming the extra spaces and lowercase the column 'city'
+ma_state$city <- trimws(ma_state$city)
+ma_state$city <- str_to_lower(ma_state$city)
+
+## Drop rows where city is null
+ma_state <- ma_state[!is.na(ma_state$city),]
+
+## Create a vector containing the name of cities
+list_of_cities <- unique(ma_state$city)
+## Create a vector having length equal to the number of cities
+count_of_markets <- 1:length(list_of_cities)
+
+## Iterate over name of cities
+for (i in 1:length(list_of_cities)){
+  ## Find the number of markets in a city and store in a variable
+  count_of_markets_in_city <- dim(subset(ma_state, ma_state$city==list_of_cities[i]))[1]
+  ## Store the value of variable at the same index as of city  
+  count_of_markets[i] <- count_of_markets_in_city
+}
+
+## Create a new data frame where the column values would be 2 vectors created above
+df <- data.frame("City"=list_of_cities, "Count_Of_Market"=count_of_markets)
+
+df <- df[order(df$Count_Of_Market, decreasing = TRUE),]
+
+# Showing the answer
+head(df, 5)
+```
+
+
+
+1.4 - Write a code to show the top 5 states by number of farmers market that offers coffee
+
+```{r}
+
+## Filter out farmers who offer coffee
+coffee_df <- df_fm %>%
+  filter(Coffee=="Y")
+
+## String manipulations to ensure consistency
+coffee_df$city <- trimws(coffee_df$city)
+coffee_df$city <- str_to_lower(coffee_df$city)
+
+## Group on State name and take the count of number of farmers market to get the result
+answer <- coffee_df %>%
+  group_by(State) %>%
+  summarise(Number_of_Markets = n())
+
+## Sort the results on number of farmers market
+answer <- answer[order(answer$Number_of_Markets, decreasing = TRUE),]
+head(answer, 5)
+```
+
+
+
+
+2.1  Use the “designation” variable and calculate the number of 20 year old wine in
+the dataset
+
+* Method 1 -> Using regex with grep / str_which
+```{R}
+
+
+# There is some confusion whether "anniversary" keyword should be considered in the dataset as wine age
+
+# Answer WITHOUT considering anniversary (using grep)
+wine_twenty_without_anniversary <- df_wine[grep("(20 |20-|20th|20- )( )?(Y+|y+|Anos|anos|anni )",df_wine$designation,ignore.case = T),]
+
+# Answer WITH anniversary (using str_which)
+wine_twenty_with_anniversary <- df_wine[str_which(df_wine$designation,"(20 |20-|20th)( )?(Y+|y+|Anniver+|anniver+|Anos|anos|anni)"),]
+
+# According to our observation of data, 20th Anniversary wine does NOT necessarily mean a 20 year old wine
+
+print(paste("There are ", dim(wine_twenty_with_anniversary)[1],"wines if we consider 'anniversary' keyword as wine age."))
+
+print(paste("There are ", dim(wine_twenty_without_anniversary)[1],"wines without considering 'anniversary' keyword as wine age."))
+
+```
+
+* Method 2 <- Using list of possible 20 year old wines to filter data
+
+```{r}
+
+## This result is producing 85 results which includes 'Anniversary' keyword as well
+
+## Lowercase all the designation for uniformity and reduce redundancy 
+df_wine$designation <- str_to_lower(df_wine$designation)
+
+## Create a vector of possible strings
+string_list <- c("20 years","20 year","20 yrs","20 yr","20 anos","20_years","20_year","20_yrs","20_yr","20_anos","20-years","20-year","20-yrs","20-yr","20-anos","20years","20year","20yr","20yrs","20anos","20 th anni","20th anni","20 anni")
+temp_df <- data.frame()
+
+## Iterate over all the possible strings and get rows after partial match
+for (i in string_list){
+  index <- str_which(df_wine$designation, i)
+  answer <- df_wine[index,]
+  temp_df <- rbind(temp_df,answer) 
+}
+## Drop duplicate rows (if any) 
+final_df <- temp_df[!duplicated(temp_df),]
+
+print(paste("There are ", dim(final_df)[1],"wines if we consider 'anniversary' keyword as wine age."))
+```
+
+3.1 Write an R code to extract keyword data from the above file and convert it to a weighted adjacency matrix. See the figure below to understand the process
+
+* Method 1 
+```{r}
+
+## drop rows with null keywords
+df_keywords1 = df_keywords[!is.na(df_keywords$`Keyword 1`),]
+temp <- c()
+
+## iterate over the keyword dataframe, pick each keyword and append it into the vector 
+for (i in 1:dim(df_keywords1)[1] ){
+  for ( j in 2:dim(df_keywords1)[2]){
+    if (!is.na(df_keywords1[[i,j]])){
+      temp <- c(temp,tolower( df_keywords1[[i,j]]))
+    }
+  }
+}
+## Drop duplicates from vector
+temp<-unique(temp)
+
+## Create a matrix with dimension equal to length of number of unique keywords
+adjacency_matrix <- matrix(0, nrow = length(temp), ncol =length(temp) )
+
+## Rename column and row names as the keywords
+rownames(adjacency_matrix) <- c(temp)
+colnames(adjacency_matrix) <- c(temp)
+
+## Iterate over keyword dataframe and increment values in the empty matrix
+n_rows = dim(df_keywords1)[1]
+for (x in 1:n_rows){
+  for (i in 2:length(df_keywords1)){
+    for (j in 2:length(df_keywords1)){
+      
+      ## Find keyword 1 and keyword 2
+      key1 <- tolower(df_keywords1[[x,i]])
+      key2 <- tolower(df_keywords1[[x,j]])
+      
+      ## Key1 should not be equal to Key2 and either of them should not be null
+      if ((!is.na(key1))&&(!is.na(key2))&&(key1!=key2)){
+        adjacency_matrix[key1, key2] = adjacency_matrix[key1, key2]+1 
+      }
+    }
+  }
+}
+
+print("The dataframe is below:")
+sum(adjacency_matrix)
+adjacency_df <- data.frame(adjacency_matrix)
+
+adjacency_df
+```
+
+
+```{R}
+
+library(tidyr)
+
+df_keywords <- read.csv("keyword_data.csv")
+
+
+
+# Pivot the table to longer form
+longer_keywords <- df_keywords %>% pivot_longer(cols= starts_with("Keyword"), values_to="Keyword")
+
+# Get all distinct keywords
+unique_keywords <- distinct(longer_keywords,Keyword) 
+
+# Remove the "" empty keyword
+unique_keywords <- unique_keywords[!(unique_keywords$Keyword == ""),]
+
+# Introduce a new CO_OCCURENCE variable to get the same data in wider form
+unique_keywords$CO_OCCURRENCE <- 0
+
+# Make the data available in wider form
+wide_unique_keywords <- unique_keywords %>% pivot_wider(names_from  =Keyword,values_from=CO_OCCURRENCE,values_fill=0)
+
+
+# Bind both wider and longer table together to get adjacency matrix
+keyword_matrix <- bind_rows(unique_keywords,wide_unique_keywords)
+
+# Dropping dummy column of co occurrence
+keyword_matrix <- keyword_matrix[,!(names(keyword_matrix) %in% c("CO_OCCURRENCE"))]
+
+# Assigning all values to 0
+keyword_matrix[,c(2:249)] <- 0
+
+
+## Solution 1
+
+# Removing all blank observations
+df_keywords <- df_keywords[!(df_keywords$Title == ""),]
+
+# Combining all keywords for an article for easier analysis
+df_keywords$COMBINED_KEYWORDS <-paste(trimws(df_keywords$Keyword.1) , trimws(df_keywords$Keyword.2) , trimws(df_keywords$Keyword.3) , trimws(df_keywords$Keyword.4)  , trimws(df_keywords$Keyword.5) , trimws(df_keywords$Keyword.6),                               trimws(df_keywords$Keyword.7)  , trimws(df_keywords$Keyword.8) , trimws(df_keywords$Keyword.9),
+trimws(df_keywords$Keyword.10) , trimws(df_keywords$Keyword.11) , trimws(df_keywords$Keyword.2),sep="-"  )
+
+df_keywords$COMBINED_KEYWORDS <- paste("-",df_keywords$COMBINED_KEYWORDS,"-",sep="")
+
+
+# 
+# Combining all keywords for an article for easier analysis
+# df_keywords$COMBINED_KEYWORDS <-paste(trimws(df_keywords$`Keyword 1`) , trimws(df_keywords$`Keyword 2`) , trimws(df_keywords$`Keyword 3`) , trimws(df_keywords$`Keyword 4`)  , trimws(df_keywords$`Keyword 5`) , trimws(df_keywords$`Keyword 6`),                               trimws(df_keywords$`Keyword 7`)  , trimws(df_keywords$`Keyword 8`) , trimws(df_keywords$`Keyword 9`),
+# trimws(df_keywords$`Keyword 10`) , trimws(df_keywords$`Keyword 11`) , trimws(df_keywords$`Keyword 12`),sep="-"  )
+
+num_articles <- dim(df_keywords)[1]
+
+unq_keywords = names(keyword_matrix)
+
+# 1 Extra entry in matrix
+num_keywords <- dim(keyword_matrix)[1] - 1
+
+
+
+
+
+## To correct -> Loop over articles first, then matrix
+# Loop over all articles
+for (i in 1:num_articles) {
+   current_article_keywords <- df_keywords[i,'COMBINED_KEYWORDS']
+   # Loop over rows in adjacency matrix
+   for( j in 1:num_keywords){
+      
+      current_row_keyword <- paste("-",keyword_matrix[j,1],"-",sep="")
+      # Loop over columns in adjacency matrix
+      for (k in 2:num_keywords) {
+         # 
+         current_col_keyword <- paste("-",unq_keywords[k],"-",sep="")
+         
+ if (current_article_keywords != "-------------" && current_col_keyword != current_row_keyword && (grepl(current_row_keyword,current_article_keywords,fixed = TRUE) && grepl(current_col_keyword,current_article_keywords,fixed = TRUE)) ) {
+            keyword_matrix[j,k] <- keyword_matrix[j,k] + 1
+         }
+      }
+   }
+}
+
+sum(keyword_matrix[,2:249])
+
+
+```
